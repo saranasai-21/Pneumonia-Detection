@@ -1,1 +1,3 @@
-# -RAG-Based-Smart-Assistant
+# Pneumonia Detection
+
+https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
