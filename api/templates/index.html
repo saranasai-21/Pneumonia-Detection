@@ -7,27 +7,47 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <div class="page">
+        <div class="container">
+            <div class="hero">
+                <div class="badge">AI Medical Demo</div>
+                <h1>Pneumonia Detection System</h1>
+                <p>Upload a chest X-ray image to get a prediction and a visual highlight.</p>
+            </div>
 
-    <div class="container">
-        <h1>Pneumonia Detection System</h1>
-        <p>Upload a chest X-ray image</p>
+            <div class="upload-card">
+                <input type="file" id="imageInput" accept="image/*">
+                <button onclick="uploadImage()">Predict</button>
+            </div>
 
-        <input type="file" id="imageInput" accept="image/*">
+            <div class="preview-area">
+                <div class="panel">
+                    <h3>Selected Image</h3>
+                    <img id="preview" src="" alt="Preview" style="display:none;">
+                </div>
+            </div>
 
-        <br><br>
+            <div id="result" class="result-box" style="display:none;"></div>
 
-        <button onclick="uploadImage()">Predict</button>
+            <div id="imageResults" class="image-results" style="display:none;">
+                <div class="panel">
+                    <h3>RGB Converted Image</h3>
+                    <img id="rgbImage" src="" alt="RGB Image">
+                </div>
 
-        <br><br>
-
-        <img id="preview" src="" alt="Preview" style="display:none; max-width: 300px; margin-top: 10px;" />
-
-        <div id="result" style="margin-top: 20px;"></div>
+                <div class="panel">
+                    <h3>Highlighted Region</h3>
+                    <img id="highlightedImage" src="" alt="Highlighted Image">
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         const imageInput = document.getElementById("imageInput");
         const preview = document.getElementById("preview");
+        const resultDiv = document.getElementById("result");
+        const imageResults = document.getElementById("imageResults");
 
         imageInput.addEventListener("change", function () {
             const file = imageInput.files[0];
@@ -39,16 +59,19 @@
 
         async function uploadImage() {
             const file = imageInput.files[0];
+
             if (!file) {
-                document.getElementById("result").innerHTML = "<p>Please select an image first.</p>";
+                resultDiv.style.display = "block";
+                resultDiv.innerHTML = `<p class="error-text">Please select an image first.</p>`;
                 return;
             }
 
             const formData = new FormData();
             formData.append("file", file);
 
-            const resultDiv = document.getElementById("result");
-            resultDiv.innerHTML = "<p>Predicting...</p>";
+            resultDiv.style.display = "block";
+            resultDiv.innerHTML = `<p class="loading-text">Predicting...</p>`;
+            imageResults.style.display = "none";
 
             try {
                 const response = await fetch("/predict", {
@@ -59,19 +82,41 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    resultDiv.innerHTML = `<p style="color:red;">Error: ${data.error || "Prediction failed"}</p>`;
+                    resultDiv.innerHTML = `<p class="error-text">Error: ${data.error || "Prediction failed"}</p>`;
                     return;
                 }
 
+                const confidence = data.confidence;
+
                 resultDiv.innerHTML = `
-                    <h2>${data.prediction}</h2>
-                    <p>Confidence: ${data.confidence}%</p>
+                    <div class="prediction-title ${data.prediction === "PNEUMONIA" ? "danger" : "safe"}">
+                        ${data.prediction}
+                    </div>
+
+                    <div class="confidence-row">
+                        <span>Confidence</span>
+                        <span>${confidence}%</span>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="progress-bar ${data.prediction === "PNEUMONIA" ? "danger-bar" : "safe-bar"}"
+                             style="width:${confidence}%">
+                        </div>
+                    </div>
+
+                    <p class="small-note">
+                        This is an AI prediction for educational/demo use.
+                    </p>
                 `;
+
+                document.getElementById("rgbImage").src = `data:image/jpeg;base64,${data.rgb_image}`;
+                document.getElementById("highlightedImage").src = `data:image/jpeg;base64,${data.highlighted_image}`;
+
+                imageResults.style.display = "grid";
             } catch (error) {
-                resultDiv.innerHTML = `<p style="color:red;">Request failed: ${error.message}</p>`;
+                resultDiv.innerHTML = `<p class="error-text">Request failed: ${error.message}</p>`;
             }
         }
     </script>
-
 </body>
 </html>
