@@ -32,10 +32,6 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "pneumonia_densenet.keras")
 STATIC_DIR = os.path.join(BASE_DIR, "api", "static")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "api", "templates")
 
-# =====================================================
-# DEBUG LOGS
-# =====================================================
-
 print("BASE_DIR:", BASE_DIR)
 print("MODEL_PATH:", MODEL_PATH)
 print("MODEL EXISTS:", os.path.exists(MODEL_PATH))
@@ -50,49 +46,117 @@ model = tf.keras.models.load_model(MODEL_PATH)
 print("MODEL LOADED SUCCESSFULLY")
 
 # =====================================================
-# FASTAPI APP
+# APP
 # =====================================================
 
 app = FastAPI(title="Pneumonia Detection System")
-
-# =====================================================
-# MOUNT STATIC FILES
-# =====================================================
-
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-# =====================================================
-# TEMPLATES
-# =====================================================
-
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
-
-# =====================================================
-# IMAGE SETTINGS
-# =====================================================
 
 IMG_SIZE = 256
 
 # =====================================================
-# PREPROCESS FUNCTION
+# HELPERS
 # =====================================================
 
 def preprocess_image(image):
     image = image.resize((IMG_SIZE, IMG_SIZE))
-    image = np.array(image)
-    image = image.astype(np.float32)
+    image = np.array(image).astype(np.float32)
     image = preprocess_input(image)
     image = np.expand_dims(image, axis=0)
     return image
 
-def image_to_base64_bgr(image_bgr):
+def image_to_base64(image_bgr):
     success, encoded = cv2.imencode(".jpg", image_bgr)
     if not success:
         return ""
     return base64.b64encode(encoded).decode("utf-8")
 
+def find_last_conv_layer(m):
+    # Search from end for a Conv2D-like layer
+    for layer in reversed(m.layers):
+        if isinstance(layer, tf.keras.Model):
+            try:
+                found = find_last_conv_layer(layer)
+                if found:
+                    return found
+            except Exception:
+                pass
+        if "conv" in layer.name.lower():
+            try:
+                _ = layer.output
+                return layer.name
+            except Exception:
+                pass
+    return None
+
+def make_gradcam_heatmap(img_array, model, last_conv_layer_name=None, pred_index=None):
+    if last_conv_layer_name is None:
+        last_conv_layer_name = find_last_conv_layer(model)
+
+    if last_conv_layer_name is None:
+        raise ValueError("Could not find a convolution layer for Grad-CAM.")
+
+    grad_model = tf.keras.models.Model(
+        [model.inputs],
+        [model.get_layer(last_conv_layer_name).output, model.output]
+    )
+
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(img_array)
+        if pred_index is None:
+            pred_index = 0
+        loss = predictions[:, pred_index]
+
+    grads = tape.gradient(loss, conv_outputs)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    conv_outputs = conv_outputs[0]
+    heatmap = tf.reduce_sum(conv_outputs * pooled_grads, axis=-1)
+
+    heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + tf.keras.backend.epsilon())
+    return heatmap.numpy()
+
+def overlay_heatmap_on_image(original_bgr, heatmap, alpha=0.45):
+    h, w = original_bgr.shape[:2]
+    heatmap_resized = cv2.resize(heatmap, (w, h))
+    heatmap_uint8 = np.uint8(255 * heatmap_resized)
+    color_map = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+    overlay = cv2.addWeighted(original_bgr, 1 - alpha, color_map, alpha, 0)
+    return overlay
+
+def draw_rounded_region(overlay_bgr, heatmap, threshold=0.55):
+    h, w = overlay_bgr.shape[:2]
+    heatmap_resized = cv2.resize(heatmap, (w, h))
+
+    mask = np.uint8(heatmap_resized >= threshold) * 255
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    output = overlay_bgr.copy()
+
+    if contours:
+        largest = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest)
+
+        if area > 50:
+            (x, y), radius = cv2.minEnclosingCircle(largest)
+            center = (int(x), int(y))
+            radius = int(radius)
+
+            cv2.circle(output, center, radius, (0, 0, 255), 4)
+            cv2.circle(output, center, 6, (0, 0, 255), -1)
+
+            x1, y1, ww, hh = cv2.boundingRect(largest)
+            cv2.rectangle(output, (x1, y1), (x1 + ww, y1 + hh), (0, 0, 255), 2)
+
+    return output
+
 # =====================================================
-# HOME PAGE
+# ROUTES
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -103,31 +167,24 @@ async def home(request: Request):
         context={}
     )
 
-# =====================================================
-# HEALTH CHECK
-# =====================================================
-
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-# =====================================================
-# PREDICTION ENDPOINT
-# =====================================================
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-
         image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-        # Original RGB image as array
+        # original image
         rgb_array = np.array(image)
+        original_bgr = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
 
-        # Preprocess for model
+        # model input
         processed_image = preprocess_image(image)
 
+        # prediction
         prediction = float(model.predict(processed_image, verbose=0)[0][0])
 
         if prediction > 0.5:
@@ -137,48 +194,23 @@ async def predict(file: UploadFile = File(...)):
             result = "NORMAL"
             confidence = 1 - prediction
 
-        # Convert RGB -> BGR for OpenCV drawing
-        bgr_image = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+        # Grad-CAM
+        heatmap = make_gradcam_heatmap(processed_image, model)
+        overlay = overlay_heatmap_on_image(original_bgr, heatmap, alpha=0.45)
+        rounded = draw_rounded_region(overlay, heatmap, threshold=0.55)
 
-        # Very simple region highlighting for visual effect
-        gray = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        _, thresh = cv2.threshold(blurred, 180, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        highlighted = bgr_image.copy()
-
-        found_region = False
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area > 500:
-                x, y, w, h = cv2.boundingRect(cnt)
-                cv2.rectangle(highlighted, (x, y), (x + w, y + h), (0, 0, 255), 3)
-                cv2.circle(highlighted, (x + w // 2, y + h // 2), max(w, h) // 2, (0, 0, 255), 2)
-                found_region = True
-
-        # If no region found, show a subtle label on the image
-        if not found_region:
-            cv2.putText(
-                highlighted,
-                "No clear region detected",
-                (15, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 0, 255),
-                2
-            )
-
-        rgb_image_base64 = image_to_base64_bgr(bgr_image)
-        highlighted_base64 = image_to_base64_bgr(highlighted)
+        # base64
+        original_base64 = image_to_base64(original_bgr)
+        overlay_base64 = image_to_base64(overlay)
+        rounded_base64 = image_to_base64(rounded)
 
         return JSONResponse(
             content={
                 "prediction": result,
                 "confidence": round(confidence * 100, 2),
-                "rgb_image": rgb_image_base64,
-                "highlighted_image": highlighted_base64
+                "original_image": original_base64,
+                "heatmap_image": overlay_base64,
+                "rounded_image": rounded_base64
             }
         )
 
@@ -188,10 +220,6 @@ async def predict(file: UploadFile = File(...)):
             status_code=500,
             content={"error": str(e)}
         )
-
-# =====================================================
-# FAVICON FIX
-# =====================================================
 
 @app.get("/favicon.ico")
 async def favicon():
