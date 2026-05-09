@@ -1,4 +1,8 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 import tensorflow as tf
 import numpy as np
 from PIL import Image
@@ -10,7 +14,7 @@ from tensorflow.keras.applications.densenet import preprocess_input
 # LOAD MODEL
 # =====================================================
 
-MODEL_PATH = r"models/pneumonia_densenet.keras"
+MODEL_PATH = "models/pneumonia_densenet.keras"
 
 model = tf.keras.models.load_model(MODEL_PATH)
 
@@ -18,11 +22,17 @@ model = tf.keras.models.load_model(MODEL_PATH)
 # FASTAPI APP
 # =====================================================
 
-app = FastAPI(
-    title="Pneumonia Detection API"
-)
+app = FastAPI()
 
-IMG_SIZE = 256
+# =====================================================
+# STATIC + TEMPLATES
+# =====================================================
+
+app.mount("/static", StaticFiles(directory="api/static"), name="static")
+
+templates = Jinja2Templates(directory="api/templates")
+
+IMG_SIZE = 224
 
 # =====================================================
 # PREPROCESS FUNCTION
@@ -30,69 +40,53 @@ IMG_SIZE = 256
 
 def preprocess_image(image):
 
-    # Resize
     image = image.resize((IMG_SIZE, IMG_SIZE))
 
-    # Convert to numpy
     image = np.array(image)
 
-    # Ensure float32
     image = image.astype(np.float32)
 
-    # DenseNet preprocessing
     image = preprocess_input(image)
 
-    # Add batch dimension
     image = np.expand_dims(image, axis=0)
 
     return image
 
 # =====================================================
-# HOME
+# HOME PAGE
 # =====================================================
 
-@app.get("/")
-def home():
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
 
-    return {
-        "message": "Pneumonia Detection API Running"
-    }
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request}
+    )
 
 # =====================================================
-# PREDICT
+# PREDICTION ENDPOINT
 # =====================================================
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
 
-    try:
+    contents = await file.read()
 
-        # Read uploaded image
-        contents = await file.read()
+    image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+    processed_image = preprocess_image(image)
 
-        # Preprocess
-        processed_image = preprocess_image(image)
+    prediction = model.predict(processed_image)[0][0]
 
-        # Prediction
-        prediction = model.predict(processed_image)[0][0]
+    if prediction > 0.5:
+        result = "PNEUMONIA"
+        confidence = float(prediction)
+    else:
+        result = "NORMAL"
+        confidence = float(1 - prediction)
 
-        # Result
-        if prediction > 0.64:
-            result = "PNEUMONIA"
-            confidence = float(prediction)
-        else:
-            result = "NORMAL"
-            confidence = float(1 - prediction)
-
-        return {
-            "prediction": result,
-            "confidence": round(confidence, 4)
-        }
-
-    except Exception as e:
-
-        return {
-            "error": str(e)
-        }
+    return {
+        "prediction": result,
+        "confidence": round(confidence * 100, 2)
+    }
