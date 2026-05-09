@@ -73,108 +73,47 @@ def image_to_base64_bgr(image_bgr):
     return base64.b64encode(encoded).decode("utf-8")
 
 def make_pseudocolor_image(rgb_array):
-    # X-rays are grayscale, so this makes them visually like your example
     gray = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2GRAY)
     colored = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
     return colored
 
-def find_last_conv_layer(model):
-    # Search backward for a convolution layer
-    for layer in reversed(model.layers):
-        layer_name = layer.name.lower()
-        if "conv" in layer_name:
-            try:
-                _ = layer.output
-                return layer.name
-            except Exception:
-                pass
-    return None
+def create_lightweight_region_image(original_bgr, result):
+    """
+    Lightweight visual highlight:
+    - Creates a pseudo-heatmap style image
+    - For pneumonia, draws a rough red suspicious area
+    - For normal, returns only the colored image
+    """
+    gray = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (7, 7), 0)
 
-def make_gradcam_heatmap(img_array, model):
+    heatmap = cv2.applyColorMap(blurred, cv2.COLORMAP_JET)
+    overlay = cv2.addWeighted(original_bgr, 0.6, heatmap, 0.4, 0)
 
-    # Try to find last convolution layer
-    last_conv_layer = None
+    if result == "PNEUMONIA":
+        _, thresh = cv2.threshold(blurred, 160, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(
+            thresh,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
 
-    for layer in reversed(model.layers):
-        try:
-            output_shape = layer.output_shape
+        if contours:
+            largest = max(contours, key=cv2.contourArea)
+            area = cv2.contourArea(largest)
 
-            if len(output_shape) == 4:
-                last_conv_layer = layer.name
-                break
+            if area > 500:
+                (x, y), radius = cv2.minEnclosingCircle(largest)
+                center = (int(x), int(y))
+                radius = int(radius)
 
-        except:
-            continue
+                cv2.circle(overlay, center, radius, (0, 0, 255), 4)
+                cv2.circle(overlay, center, 6, (0, 0, 255), -1)
 
-    if last_conv_layer is None:
-        raise Exception("No convolution layer found")
+                x1, y1, w, h = cv2.boundingRect(largest)
+                cv2.rectangle(overlay, (x1, y1), (x1 + w, y1 + h), (0, 0, 255), 2)
 
-    grad_model = tf.keras.models.Model(
-        [model.inputs],
-        [model.get_layer(last_conv_layer).output, model.output]
-    )
-
-    with tf.GradientTape() as tape:
-
-        conv_outputs, predictions = grad_model(img_array)
-
-        loss = predictions[:, 0]
-
-    grads = tape.gradient(loss, conv_outputs)
-
-    pooled_grads = tf.reduce_mean(
-        grads,
-        axis=(0, 1, 2)
-    )
-
-    conv_outputs = conv_outputs[0]
-
-    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
-
-    heatmap = tf.squeeze(heatmap)
-
-    heatmap = tf.maximum(heatmap, 0)
-
-    heatmap /= tf.reduce_max(heatmap) + 1e-8
-
-    return heatmap.numpy()
-def overlay_heatmap_on_image(original_bgr, heatmap, alpha=0.45):
-    h, w = original_bgr.shape[:2]
-    heatmap_resized = cv2.resize(heatmap, (w, h))
-    heatmap_uint8 = np.uint8(255 * heatmap_resized)
-    color_map = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
-    overlay = cv2.addWeighted(original_bgr, 1 - alpha, color_map, alpha, 0)
     return overlay
-
-def draw_rounded_region(overlay_bgr, heatmap, threshold=0.55):
-    h, w = overlay_bgr.shape[:2]
-    heatmap_resized = cv2.resize(heatmap, (w, h))
-
-    mask = np.uint8(heatmap_resized >= threshold) * 255
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-    mask = cv2.dilate(mask, kernel, iterations=1)
-
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    output = overlay_bgr.copy()
-
-    if contours:
-        largest = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest)
-
-        if area > 50:
-            (x, y), radius = cv2.minEnclosingCircle(largest)
-            center = (int(x), int(y))
-            radius = int(radius)
-
-            cv2.circle(output, center, radius, (0, 0, 255), 4)
-            cv2.circle(output, center, 6, (0, 0, 255), -1)
-
-            x1, y1, ww, hh = cv2.boundingRect(largest)
-            cv2.rectangle(output, (x1, y1), (x1 + ww, y1 + hh), (0, 0, 255), 2)
-
-    return output
 
 # =====================================================
 # ROUTES
@@ -214,19 +153,12 @@ async def predict(file: UploadFile = File(...)):
         # Pseudo-colored image for display
         colored_bgr = make_pseudocolor_image(rgb_array)
 
-        # Grad-CAM only for pneumonia
-        if result == "PNEUMONIA":
-            heatmap = make_gradcam_heatmap(processed_image, model)
-            overlay = overlay_heatmap_on_image(original_bgr, heatmap, alpha=0.45)
-            rounded = draw_rounded_region(overlay, heatmap, threshold=0.55)
-        else:
-            overlay = colored_bgr.copy()
-            rounded = colored_bgr.copy()
+        # Lightweight region visualization
+        highlighted_bgr = create_lightweight_region_image(original_bgr, result)
 
         original_base64 = image_to_base64_bgr(original_bgr)
         colored_base64 = image_to_base64_bgr(colored_bgr)
-        overlay_base64 = image_to_base64_bgr(overlay)
-        rounded_base64 = image_to_base64_bgr(rounded)
+        highlighted_base64 = image_to_base64_bgr(highlighted_bgr)
 
         return JSONResponse(
             content={
@@ -234,13 +166,13 @@ async def predict(file: UploadFile = File(...)):
                 "confidence": round(confidence * 100, 2),
                 "original_image": original_base64,
                 "colored_image": colored_base64,
-                "heatmap_image": overlay_base64,
-                "rounded_image": rounded_base64
+                "highlighted_image": highlighted_base64
             }
         )
 
     except Exception as e:
-        print("PREDICTION ERROR:", str(e))
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"error": str(e)}
