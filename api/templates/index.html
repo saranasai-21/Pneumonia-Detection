@@ -36,8 +36,8 @@
                 </div>
 
                 <div class="panel">
-                    <h3>Grad-CAM Heatmap</h3>
-                    <img id="heatmapImage" src="" alt="Heatmap Image">
+                    <h3>Pseudo-Colored Image</h3>
+                    <img id="coloredImage" src="" alt="Colored Image">
                 </div>
 
                 <div class="panel">
@@ -109,7 +109,7 @@
                 `;
 
                 document.getElementById("originalImage").src = `data:image/jpeg;base64,${data.original_image}`;
-                document.getElementById("heatmapImage").src = `data:image/jpeg;base64,${data.heatmap_image}`;
+                document.getElementById("coloredImage").src = `data:image/jpeg;base64,${data.colored_image}`;
                 document.getElementById("roundedImage").src = `data:image/jpeg;base64,${data.rounded_image}`;
 
                 imageResults.style.display = "grid";
