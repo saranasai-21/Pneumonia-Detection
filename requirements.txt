@@ -1,7 +1,8 @@
-jinja2
 fastapi
 uvicorn
+gunicorn
+jinja2
+python-multipart
 tensorflow-cpu
 numpy
 pillow
-python-multipart
