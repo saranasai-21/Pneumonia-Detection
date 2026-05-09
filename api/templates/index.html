@@ -1,25 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pneumonia Detection</title>
-
     <link rel="stylesheet" href="/static/style.css">
-
 </head>
-
 <body>
 
     <div class="container">
-
         <h1>Pneumonia Detection System</h1>
-
         <p>Upload a chest X-ray image</p>
 
-        <input type="file" id="imageInput">
+        <input type="file" id="imageInput" accept="image/*">
 
         <br><br>
 
@@ -27,50 +20,58 @@
 
         <br><br>
 
-        <img id="preview" src="" alt="" />
+        <img id="preview" src="" alt="Preview" style="display:none; max-width: 300px; margin-top: 10px;" />
 
-        
-        <div id="result"></div>
-
+        <div id="result" style="margin-top: 20px;"></div>
     </div>
 
     <script>
-
         const imageInput = document.getElementById("imageInput");
         const preview = document.getElementById("preview");
 
         imageInput.addEventListener("change", function () {
-
             const file = imageInput.files[0];
+            if (!file) return;
 
             preview.src = URL.createObjectURL(file);
-
             preview.style.display = "block";
         });
 
         async function uploadImage() {
-
             const file = imageInput.files[0];
+            if (!file) {
+                document.getElementById("result").innerHTML = "<p>Please select an image first.</p>";
+                return;
+            }
 
             const formData = new FormData();
-
             formData.append("file", file);
 
-            const response = await fetch("/predict", {
-                method: "POST",
-                body: formData
-            });
+            const resultDiv = document.getElementById("result");
+            resultDiv.innerHTML = "<p>Predicting...</p>";
 
-            const data = await response.json();
+            try {
+                const response = await fetch("/predict", {
+                    method: "POST",
+                    body: formData
+                });
 
-            document.getElementById("result").innerHTML = `
-                <h2>${data.prediction}</h2>
-                <p>Confidence: ${data.confidence}%</p>
-            `;
+                const data = await response.json();
+
+                if (!response.ok) {
+                    resultDiv.innerHTML = `<p style="color:red;">Error: ${data.error || "Prediction failed"}</p>`;
+                    return;
+                }
+
+                resultDiv.innerHTML = `
+                    <h2>${data.prediction}</h2>
+                    <p>Confidence: ${data.confidence}%</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color:red;">Request failed: ${error.message}</p>`;
+            }
         }
-
     </script>
 
 </body>
-
 </html>
