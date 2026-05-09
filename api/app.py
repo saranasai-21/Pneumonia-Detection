@@ -36,11 +36,14 @@ app = FastAPI()
 # STATIC + TEMPLATES
 # =====================================================
 
-app.mount("/static", StaticFiles(directory="api/static"), name="static")
+STATIC_DIR = os.path.join(BASE_DIR, "api", "static")
+TEMPLATE_DIR = os.path.join(BASE_DIR, "api", "templates")
 
-templates = Jinja2Templates(directory="api/templates")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-IMG_SIZE = 224
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+IMG_SIZE = 256
 
 # =====================================================
 # PREPROCESS FUNCTION
