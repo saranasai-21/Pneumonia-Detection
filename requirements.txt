@@ -3,6 +3,7 @@ uvicorn
 gunicorn
 jinja2
 python-multipart
-tensorflow-cpu
+tensorflow
 numpy
 pillow
+opencv-python-headless
