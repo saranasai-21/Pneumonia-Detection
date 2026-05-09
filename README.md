@@ -37,7 +37,7 @@ Pneumonia-Detection/
 │
 ├── app.py                 
 ├── model/
-│   └── pneumonia_model.h5  # Trained deep learning model
+│   └── pneumonia_model.keras  # Trained deep learning model
 │
 ├── templates/
 │   └── index.html         
@@ -140,12 +140,6 @@ http://127.0.0.1:8000
 ---
 
 ## API Endpoints
-
-### Home Page
-
-```http
-GET /
-```
 
 ### Predict Pneumonia
 
