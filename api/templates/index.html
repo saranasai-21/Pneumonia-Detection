@@ -12,7 +12,7 @@
             <div class="hero">
                 <div class="badge">AI Medical Demo</div>
                 <h1>Pneumonia Detection System</h1>
-                <p>Upload a chest X-ray image to get prediction and highlighted region.</p>
+                <p>Upload a chest X-ray image to get prediction and visual highlights.</p>
             </div>
 
             <div class="upload-card">
@@ -41,8 +41,8 @@
                 </div>
 
                 <div class="panel">
-                    <h3>Rounded Suspicious Area</h3>
-                    <img id="roundedImage" src="" alt="Rounded Region Image">
+                    <h3>Highlighted Region</h3>
+                    <img id="highlightedImage" src="" alt="Highlighted Image">
                 </div>
             </div>
         </div>
@@ -83,11 +83,18 @@
                     body: formData
                 });
 
-                const data = await response.json();
+                const contentType = response.headers.get("content-type") || "";
+                let data = null;
+
+                if (contentType.includes("application/json")) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(text.slice(0, 180));
+                }
 
                 if (!response.ok) {
-                    resultDiv.innerHTML = `<p class="error-text">Error: ${data.error || "Prediction failed"}</p>`;
-                    return;
+                    throw new Error(data.error || "Prediction failed");
                 }
 
                 resultDiv.innerHTML = `
@@ -110,7 +117,7 @@
 
                 document.getElementById("originalImage").src = `data:image/jpeg;base64,${data.original_image}`;
                 document.getElementById("coloredImage").src = `data:image/jpeg;base64,${data.colored_image}`;
-                document.getElementById("roundedImage").src = `data:image/jpeg;base64,${data.rounded_image}`;
+                document.getElementById("highlightedImage").src = `data:image/jpeg;base64,${data.highlighted_image}`;
 
                 imageResults.style.display = "grid";
             } catch (error) {
