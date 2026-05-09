@@ -90,33 +90,54 @@ def find_last_conv_layer(model):
                 pass
     return None
 
-def make_gradcam_heatmap(img_array, model, pred_index=0):
-    last_conv_layer_name = find_last_conv_layer(model)
+def make_gradcam_heatmap(img_array, model):
 
-    if last_conv_layer_name is None:
-        raise ValueError("Could not find a convolution layer for Grad-CAM.")
+    # Try to find last convolution layer
+    last_conv_layer = None
+
+    for layer in reversed(model.layers):
+        try:
+            output_shape = layer.output_shape
+
+            if len(output_shape) == 4:
+                last_conv_layer = layer.name
+                break
+
+        except:
+            continue
+
+    if last_conv_layer is None:
+        raise Exception("No convolution layer found")
 
     grad_model = tf.keras.models.Model(
         [model.inputs],
-        [model.get_layer(last_conv_layer_name).output, model.output]
+        [model.get_layer(last_conv_layer).output, model.output]
     )
 
     with tf.GradientTape() as tape:
+
         conv_outputs, predictions = grad_model(img_array)
-        loss = predictions[:, pred_index]
+
+        loss = predictions[:, 0]
 
     grads = tape.gradient(loss, conv_outputs)
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    pooled_grads = tf.reduce_mean(
+        grads,
+        axis=(0, 1, 2)
+    )
 
     conv_outputs = conv_outputs[0]
-    heatmap = tf.reduce_sum(conv_outputs * pooled_grads, axis=-1)
+
+    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+
+    heatmap = tf.squeeze(heatmap)
 
     heatmap = tf.maximum(heatmap, 0)
-    max_val = tf.reduce_max(heatmap)
-    heatmap = heatmap / (max_val + tf.keras.backend.epsilon())
+
+    heatmap /= tf.reduce_max(heatmap) + 1e-8
 
     return heatmap.numpy()
-
 def overlay_heatmap_on_image(original_bgr, heatmap, alpha=0.45):
     h, w = original_bgr.shape[:2]
     heatmap_resized = cv2.resize(heatmap, (w, h))
