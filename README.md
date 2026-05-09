@@ -36,7 +36,7 @@ A deep learning-based web application for detecting **Pneumonia from Chest X-ray
 Pneumonia-Detection/
 │
 ├── app.py                 
-├── model/
+├── models/
 │   └── pneumonia_model.keras  # Trained deep learning model
 │
 ├── templates/
