@@ -143,7 +143,7 @@ async def predict(file: UploadFile = File(...)):
         processed_image = preprocess_image(image)
         prediction = float(model.predict(processed_image, verbose=0)[0][0])
 
-        if prediction > 0.5:
+        if prediction > 0.6:
             result = "PNEUMONIA"
             confidence = prediction
         else:
