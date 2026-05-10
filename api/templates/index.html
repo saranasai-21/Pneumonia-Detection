@@ -111,8 +111,6 @@
                         <div class="progress-bar ${data.prediction === "PNEUMONIA" ? "danger-bar" : "safe-bar"}"
                              style="width:${data.confidence}%"></div>
                     </div>
-
-                    <p class="small-note">This is an AI prediction for educational/demo use.</p>
                 `;
 
                 document.getElementById("originalImage").src = `data:image/jpeg;base64,${data.original_image}`;
