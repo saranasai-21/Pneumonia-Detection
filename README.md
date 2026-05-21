@@ -75,6 +75,8 @@ val/
     NORMAL/
     PNEUMONIA/
 ```
+# Parameters
+<img width="527" height="242" alt="Screenshot 2026-05-22 035826" src="https://github.com/user-attachments/assets/0327ac2a-6805-414e-87dc-ecd968ce54c0" />
 
 ---
 
@@ -136,21 +138,6 @@ Application runs at:
 ```bash
 http://127.0.0.1:8000
 ```
-
----
-
-## API Endpoints
-
-### Predict Pneumonia
-
-```http
-POST /predict
-```
-
-Upload an X-ray image and receive prediction results.
-
----
-
 ## Docker Setup
 
 ### Build Docker Image
@@ -167,19 +154,19 @@ docker run -p 8000:8000 pneumonia-detection
 
 ---
 
-## Example Prediction Workflow
+# Classification Report, ROC curve & Confusion Matrix
+<img width="605" height="384" alt="Screenshot 2026-05-22 035720" src="https://github.com/user-attachments/assets/7628bfed-8a9d-4e41-bef5-808abb4824b8" />
+<img width="529" height="470" alt="Screenshot 2026-05-22 040252" src="https://github.com/user-attachments/assets/7ce8725c-1e60-4622-b25c-6403d2664ad4" />
+<img width="654" height="551" alt="Screenshot 2026-05-22 040419" src="https://github.com/user-attachments/assets/b466ba0a-2a38-4ac4-b300-a0042deabb6d" />
 
-1. Open the web app
-2. Upload a Chest X-ray image
-3. Model processes the image
-4. Prediction displayed:
-   - Pneumonia
-   - Normal
+# Explainable AI (Grad-CAM)
 
----
+Implemented Grad-CAM visualization for DenseNet121 to highlight important lung regions influencing pneumonia predictions with help of AI.
 
+<img width="1083" height="697" alt="Screenshot 2026-05-22 041412" src="https://github.com/user-attachments/assets/4deb7df6-9d7d-49c5-9cf0-1dc9f345c4d7" />
+
+### Live Demo Link : https://pneumonia-detection-druh.onrender.com/
 ## Screenshots
-
 ### Home Page
 <img width="1187" height="584" alt="image" src="https://github.com/user-attachments/assets/f8637957-964f-4257-a691-5a204b441be5" />
 
