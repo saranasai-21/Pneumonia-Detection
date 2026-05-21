@@ -46,6 +46,9 @@ Pneumonia-Detection/
 │
 ├── requirements.txt
 ├── Dockerfile
+├── Metrics visualization.py
+├── train.py
+├── gradcam.py
 └── README.md
 ```
 
