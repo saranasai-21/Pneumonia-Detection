@@ -2,6 +2,8 @@
 
 A deep learning-based web application for detecting **Pneumonia from Chest X-ray images** using Convolutional Neural Networks (CNNs) and Transfer Learning techniques. This project leverages TensorFlow/Keras and FastAPI to provide an easy-to-use interface for medical image classification.
 
+### Live Demo Link : https://pneumonia-detection-druh.onrender.com/
+
 ---
 
 ## Features
@@ -168,7 +170,7 @@ Implemented Grad-CAM visualization for DenseNet121 to highlight important lung r
 
 <img width="1083" height="697" alt="Screenshot 2026-05-22 041412" src="https://github.com/user-attachments/assets/4deb7df6-9d7d-49c5-9cf0-1dc9f345c4d7" />
 
-### Live Demo Link : https://pneumonia-detection-druh.onrender.com/
+
 ## Screenshots
 ### Home Page
 <img width="1187" height="584" alt="image" src="https://github.com/user-attachments/assets/f8637957-964f-4257-a691-5a204b441be5" />
